@@ -405,6 +405,19 @@ platform_check_image() {
 		fit_check_image "$1"
 		return $?
 		;;
+	ruijie,rg-x30e|\
+	ruijie,rg-x30e-stock|\
+	ruijie,rg-x30e-firmware2)
+		# tar magic `ustar`
+		magic="$(dd if="$1" bs=1 skip=257 count=5 2>/dev/null)"
+
+		[ "$magic" != "ustar" ] && {
+			echo "Invalid image type."
+			return 1
+		}
+
+		return 0
+		;;
 	creatlentem,clt-r30b1|\
 	creatlentem,clt-r30b1-112m|\
 	hiveton,h5000m|\
