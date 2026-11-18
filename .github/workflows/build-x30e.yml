@@ -5,6 +5,9 @@ name: build-fanchmwrt-x30e
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'configs/x30e-build.trigger'
 
 permissions:
   contents: read
