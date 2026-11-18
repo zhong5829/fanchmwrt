@@ -132,9 +132,9 @@
 
 		spi-max-frequency = <52000000>;
 
-		/* MT7981B 支持 4-bit SPI NAND，但 X30E 板上按 1-bit 走线 */
-		spi-tx-bus-width = <1>;
-		spi-rx-bus-width = <1>;
+		/* 原厂 u-boot/内核 DTB 均使用 4-bit SPI NAND */
+		spi-tx-bus-width = <4>;
+		spi-rx-bus-width = <4>;
 
 		spi-cal-enable;
 		spi-cal-mode = "read-data";
