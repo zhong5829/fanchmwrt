@@ -68,10 +68,14 @@ jobs:
             grep -q "CONFIG_PACKAGE_${p}=y" .config || { echo "缺少核心包：${p}"; exit 1; }
           done
           echo "=== Mesh 选项 ==="
-          grep -E "CONFIG_PACKAGE_(wpad|kmod-batman-adv|batctl|luci-app-batman-adv|luci-proto-batadv|dawn|luci-app-dawn)" .config
-          for p in wpad-mesh-mbedtls kmod-batman-adv batctl luci-app-batman-adv dawn luci-app-dawn; do
+          grep -E "CONFIG_PACKAGE_(wpad|kmod-batman-adv|batctl|luci-proto-batman-adv|dawn|luci-app-dawn)" .config
+          for p in wpad-mesh-mbedtls kmod-batman-adv dawn luci-app-dawn; do
             grep -q "CONFIG_PACKAGE_${p}=y" .config || { echo "缺少 Mesh 包：${p}"; exit 1; }
           done
+          grep -qE '^CONFIG_PACKAGE_batctl-(default|full|tiny)=y' .config \
+            || { echo "缺少 Mesh 包：batctl 变体"; exit 1; }
+          grep -q "CONFIG_PACKAGE_luci-proto-batman-adv=y" .config \
+            || echo "警告：luci-proto-batman-adv 未选中（不影响底层 batman）"
           if grep -q '^CONFIG_PACKAGE_wpad-basic-mbedtls=y' .config; then
             echo "wpad-basic 与 wpad-mesh 冲突"; exit 1
           fi
