@@ -279,6 +279,13 @@
 &wifi {
 	status = "okay";
 
+	/* mt7981b.dtsi 默认的 dbdc pinctrl 会占用 WF_HB8/GPIO54，
+	 * 与 MT7531 的 reset-gpios 冲突，导致 WMAC 初始化失败并 panic。
+	 * 原厂/可用固件的 wifi 节点不引用该 pinctrl 组。
+	 */
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-names;
+
 	nvmem-cells = <&eeprom_factory_0>;
 	nvmem-cell-names = "eeprom";
 };
