@@ -113,7 +113,8 @@
 	switch: switch@1f {
 		compatible = "mediatek,mt7531";
 		reg = <31>;
-		reset-gpios = <&pio 54 GPIO_ACTIVE_HIGH>;
+		/* GPIO54 与 WiFi 的 WF_HB8 冲突，改由 U-Boot 完成复位，
+		 * 内核不再占用该引脚。 */
 		interrupt-controller;
 		#interrupt-cells = <1>;
 		interrupt-parent = <&pio>;
@@ -279,13 +280,9 @@
 &wifi {
 	status = "okay";
 
-	/* mt7981b.dtsi 默认的 dbdc pinctrl 会占用 WF_HB8/GPIO54，
-	 * 与 MT7531 的 reset-gpios 冲突，导致 WMAC 初始化失败并 panic。
-	 * 原厂/可用固件的 wifi 节点不引用该 pinctrl 组。
+	/* 使用 mt7981b.dtsi 默认的 wifi-dbdc-pins（wf0_mode1）。
+	 * GPIO54 的交换机复位已移除，不再与 WF_HB8 冲突。
 	 */
-	/delete-property/ pinctrl-0;
-	/delete-property/ pinctrl-names;
-
 	nvmem-cells = <&eeprom_factory_0>;
 	nvmem-cell-names = "eeprom";
 };
