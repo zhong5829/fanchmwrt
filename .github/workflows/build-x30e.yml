@@ -24,8 +24,6 @@ jobs:
       fail-fast: false
       matrix:
         device:
-          - ruijie_rg-x30e-stock
-          - ruijie_rg-x30e-firmware2
           - ruijie_rg-x30e
 
     steps:
