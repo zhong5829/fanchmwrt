@@ -1,1 +1,1 @@
-2026-11-18 build-2: 4-bit SPI NAND + earlycon + nvmem eeprom
+2026-11-20 build-3: drop wifi dbdc pinctrl conflicting with MT7531 reset
