@@ -69,6 +69,14 @@ jobs:
           for p in fwxd kmod-fwx luci-app-fwx-dashboard luci-app-fwx-app-center luci-theme-fanchmwrt; do
             grep -q "CONFIG_PACKAGE_${p}=y" .config || { echo "缺少核心包：${p}"; exit 1; }
           done
+          echo "=== Mesh 选项 ==="
+          grep -E "CONFIG_PACKAGE_(wpad|kmod-batman-adv|batctl|luci-app-batman-adv|luci-proto-batadv|dawn|luci-app-dawn)" .config
+          for p in wpad-mesh-mbedtls kmod-batman-adv batctl luci-app-batman-adv dawn luci-app-dawn; do
+            grep -q "CONFIG_PACKAGE_${p}=y" .config || { echo "缺少 Mesh 包：${p}"; exit 1; }
+          done
+          if grep -q '^CONFIG_PACKAGE_wpad-basic-mbedtls=y' .config; then
+            echo "wpad-basic 与 wpad-mesh 冲突"; exit 1
+          fi
 
       - name: 下载软件源码包
         run: make download -j8 || make download -j1 V=s
