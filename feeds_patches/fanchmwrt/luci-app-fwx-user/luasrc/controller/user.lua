@@ -141,23 +141,24 @@ function sort_sync_users(list)
 	end)
 end
 
-local function load_sync_peer_lists()
-	local lists = {}
+local function load_sync_peer_entries()
+	local entries = {}
 	local ok, fs = pcall(require, "nixio.fs")
 	if not ok or not fs then
-		return lists
+		return entries
 	end
 	local json = require "luci.jsonc"
 	local now = os.time()
 	local ok_dir, dir = pcall(fs.dir, SYNC_PEER_DIR)
 	if not ok_dir or not dir then
-		return lists
+		return entries
 	end
 	for name in dir do
-		if name:match("%.json$") then
+		if name:match("%.json$") and not name:match("%.bindings%.json$") then
+			local ip = name:match("^(.+)%.json$")
 			local path = SYNC_PEER_DIR .. "/" .. name
 			local stat = fs.stat(path)
-			if stat and stat.mtime and (now - stat.mtime) <= SYNC_STALE_SEC then
+			if ip and stat and stat.mtime and (now - stat.mtime) <= SYNC_STALE_SEC then
 				local fd = io.open(path, "r")
 				if fd then
 					local raw = fd:read("*a")
@@ -165,13 +166,74 @@ local function load_sync_peer_lists()
 					local parsed = json.parse(raw)
 					local data = parsed and (parsed.data or parsed)
 					if data and type(data.list) == "table" then
-						lists[#lists + 1] = data.list
+						entries[#entries + 1] = { ip = ip, list = data.list }
 					end
 				end
 			end
 		end
 	end
-	return lists
+	return entries
+end
+
+function build_serving_map(local_list, peer_entries)
+	local self_ip = own_lan_ip()
+	local best = {}
+
+	local function consider(ip, user)
+		if not ip or type(user) ~= "table" or sync_is_blank(user.mac) then
+			return
+		end
+		if sync_to_num(user.online) ~= 1 or sync_to_num(user.is_wireless) ~= 1 then
+			return
+		end
+		if sync_is_blank(user.wifi_ifname) then
+			return
+		end
+		local rssi = sync_to_num(user.rssi)
+		if rssi == 0 then
+			return
+		end
+		local key = string.upper(tostring(user.mac))
+		if not best[key] or rssi > best[key].rssi then
+			best[key] = {
+				node = ip,
+				band = user.band or "",
+				ifname = user.wifi_ifname,
+				rssi = rssi
+			}
+		end
+	end
+
+	if self_ip then
+		for _, user in ipairs(local_list or {}) do
+			consider(self_ip, user)
+		end
+	end
+	for _, entry in ipairs(peer_entries or {}) do
+		for _, user in ipairs(entry.list or {}) do
+			consider(entry.ip, user)
+		end
+	end
+
+	return best
+end
+
+function apply_serving_map(list, best)
+	best = best or {}
+	for _, user in ipairs(list or {}) do
+		local info = best[string.upper(tostring(user.mac or ""))]
+		if info then
+			user.serving_node = info.node
+			user.serving_band = info.band
+			user.serving_ifname = info.ifname
+			user.serving_rssi = info.rssi
+		else
+			user.serving_node = ""
+			user.serving_band = ""
+			user.serving_ifname = ""
+			user.serving_rssi = 0
+		end
+	end
 end
 
 local AP_BIND_FILE = "/etc/fwx_ap_bind.json"
@@ -246,7 +308,7 @@ local function save_local_binding(mac, node, band, deleted)
 	return true
 end
 
-local function own_lan_ip()
+function own_lan_ip()
 	local fd = io.popen("uci -q get network.lan.ipaddr 2>/dev/null")
 	if not fd then
 		return nil
@@ -507,10 +569,20 @@ function get_all_users()
 
 	local local_list = resp_obj.data.list or {}
 
+	local peer_entries = {}
+	local ok_peers, entries = pcall(load_sync_peer_entries)
+	if ok_peers and entries then
+		peer_entries = entries
+	end
 	local peer_lists = {}
-	local ok_peers, peers = pcall(load_sync_peer_lists)
-	if ok_peers and peers then
-		peer_lists = peers
+	for _, entry in ipairs(peer_entries) do
+		peer_lists[#peer_lists + 1] = entry.list
+	end
+
+	local serving_map = {}
+	local ok_serving, map = pcall(build_serving_map, local_list, peer_entries)
+	if ok_serving and map then
+		serving_map = map
 	end
 
 	local ok_merge, merged = pcall(merge_sync_users, local_list, peer_lists)
@@ -519,6 +591,7 @@ function get_all_users()
 	end
 	pcall(sort_sync_users, merged)
 	pcall(annotate_ap_bindings, merged)
+	pcall(apply_serving_map, merged, serving_map)
 
 	local total_num = #merged
 	local total_page = 1

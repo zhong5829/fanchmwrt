@@ -105,7 +105,7 @@
 				rssiHeaderEl.style.display = user_rssi_enable ? 'table-cell' : 'none';
 			}
 			if (loadingCellEl) {
-				loadingCellEl.colSpan = 11 + (user_session_enable ? 1 : 0) + (user_rssi_enable ? 1 : 0);
+				loadingCellEl.colSpan = 12 + (user_session_enable ? 1 : 0) + (user_rssi_enable ? 1 : 0);
 			}
 		}
 
@@ -756,6 +756,28 @@
 					var card_identity_name = nickname || hostname || "";
 					var card_info_line = card_identity_name ? (card_identity_name + ' (' + mac + ')') : mac;
 
+					var servingText = '';
+					var servingMismatch = false;
+					if (parseInt(user_list[i].is_wireless, 10) === 1) {
+						if (user_list[i].serving_node) {
+							var snode = bind_node_label(user_list[i].serving_node).replace(/\s*\([^)]*\)/, '').replace(/\s*本机$/, '');
+							var sband = user_list[i].serving_band === '2g' ? '2.4G' : (user_list[i].serving_band === '5g' ? '5G' : '');
+							servingText = snode + (sband ? ' · ' + sband : '');
+							if (user_list[i].bind_node) {
+								var bandMismatch = user_list[i].bind_band && user_list[i].bind_band !== 'auto' && user_list[i].serving_band && user_list[i].serving_band !== user_list[i].bind_band;
+								servingMismatch = (user_list[i].serving_node !== user_list[i].bind_node) || bandMismatch;
+							}
+						} else {
+							servingText = '—';
+						}
+					} else {
+						servingText = '有线';
+					}
+					var servingTitle = servingMismatch ? ('已绑定 ' + bind_summary(user_list[i])) : '';
+					var servingHtml = '<span class="serving-node' + (servingMismatch ? ' serving-mismatch' : '') + '"' +
+						(servingTitle ? ' title="' + escapeHtml(servingTitle) + '"' : '') + '>' + escapeHtml(servingText) + '</span>';
+					var servingCard = '<div class="user-card-line"><span class="user-card-label">连接节点</span><span class="user-card-value">' + servingHtml + '</span></div>';
+
 					const $tr = $('<tr class="tr"></tr>');
 					if (user_list[i].online != 1) {
 						$tr.css('color', '#A9A9A9');
@@ -770,6 +792,7 @@
 						</div>
 					</td>`);
 					$tr.append(`<td class="td">${user_list[i].ip}</td>`);
+					$tr.append('<td class="td">' + servingHtml + '</td>');
 					var upRate = formatRate(user_list[i].up_rate || 0);
 					$tr.append('<td class="td"><span style="color: #60a5fa;">' + upRate + '</span></td>');
 					var downRate = formatRate(user_list[i].down_rate || 0);
@@ -876,6 +899,7 @@
 								${onlineBadge}
 							</div>
 							<div class="user-card-body">
+								${servingCard}
 								<div class="user-card-line"><span class="user-card-label" title="&#20170;&#26085;&#19978;&#32593;&#27969;&#37327;">&#19978;&#32593;&#27969;&#37327;</span><span class="user-card-value">${totalTrafficStr}</span></div>
 								<div class="user-card-line"><span class="user-card-label" title="&#20170;&#26085;&#19978;&#32593;&#26102;&#38271;">&#19978;&#32593;&#26102;&#38271;</span><span class="user-card-value">${todayActiveTimeStr}</span></div>
 								<div class="user-card-line"><span class="user-card-label"><%:Rate%></span><span class="user-card-value user-card-rate"><span class="user-card-up">&uarr; ${upRate}</span><span class="user-card-down">&darr; ${downRate}</span></span></div>
@@ -1306,13 +1330,16 @@
 
 		<div id="user_table_wrapper" class="user-table-wrapper">
 
-		<table class="table cbi-section-table" id="user_status_table" style="table-layout: fixed; width: 100%; min-width: 1350px;">
+		<table class="table cbi-section-table" id="user_status_table" style="table-layout: fixed; width: 100%; min-width: 1445px;">
 			<tr class="tr">
 				<th class="th" style="width: 150px;">
 					<%:Device Info%>
 				</th>
 				<th class="th" style="width: 100px;">
 					<%:IP Address%>
+				</th>
+				<th class="th" style="width: 95px;">
+					连接节点
 				</th>
 				<th class="th" style="width: 60px;">
 					<%:Upstream Rate%>
@@ -2013,12 +2040,12 @@
 		}
 
 		#user_status_table {
-			min-width: 1350px !important;
+			min-width: 1445px !important;
 		}
 
 		#user_table_wrapper #user_status_table.table.cbi-section-table {
 			display: table !important;
-			width: 1350px !important;
+			width: 1445px !important;
 			table-layout: fixed !important;
 		}
 
@@ -2093,6 +2120,16 @@
 	#bindBandSelect option {
 		color: #333333 !important;
 		background: #ffffff !important;
+	}
+
+	.serving-node {
+		font-size: 12px;
+		white-space: nowrap;
+	}
+
+	.serving-mismatch {
+		color: #f59e0b;
+		font-weight: 600;
 	}
 
 </style>
