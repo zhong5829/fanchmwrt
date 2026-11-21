@@ -1,0 +1,23 @@
+#!/bin/sh /etc/rc.common
+
+START=97
+USE_PROCD=1
+
+start_service() {
+	[ "$(uci -q get fwx_sync.sync.enable)" = "1" ] || return 0
+	[ -n "$(uci -q get fwx_sync.sync.token)" ] || return 0
+
+	procd_open_instance server
+	procd_set_param command /usr/sbin/uhttpd -f -h /tmp/fwx_sync -p 0.0.0.0:8787 -N 32 -D -R
+	procd_set_param respawn 3600 5 5
+	procd_close_instance
+
+	procd_open_instance loop
+	procd_set_param command /usr/bin/fwx_sync.sh
+	procd_set_param respawn 3600 5 5
+	procd_close_instance
+}
+
+stop_service() {
+	:
+}

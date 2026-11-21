@@ -41,6 +41,7 @@ endef
 define Package/fwxd/conffiles
 /etc/fwxd/custom_feature.cfg
 /etc/config/fwx
+/etc/config/fwx_sync
 endef
 
 
@@ -56,6 +57,8 @@ define Package/fwxd/install
 	$(INSTALL_DATA) ./files/custom_feature.cfg $(1)/etc/fwxd/custom_feature.cfg
 	$(INSTALL_BIN) ./files/uci-defaults/* $(1)/etc/uci-defaults/
 	$(INSTALL_BIN) ./files/fwx.init $(1)/etc/init.d/fwx
+	$(INSTALL_BIN) ./files/fwx_sync.init $(1)/etc/init.d/fwx_sync
+	$(INSTALL_BIN) ./files/fwx_sync.sh $(1)/usr/bin
 	$(INSTALL_BIN) ./files/fwx_cli.sh $(1)/usr/bin
 	$(INSTALL_BIN) ./files/fwx_app_init.sh $(1)/usr/bin/fwx_app_init
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/fwxd $(1)/usr/bin
@@ -65,6 +68,7 @@ define Package/fwxd/install
 	$(INSTALL_DATA) ./files/macfilter.config $(1)/etc/config/macfilter
 	$(INSTALL_DATA) ./files/user_info.config $(1)/etc/config/user_info
 	$(INSTALL_DATA) ./files/fwx.config $(1)/etc/config/fwx
+	$(INSTALL_DATA) ./files/fwx_sync.config $(1)/etc/config/fwx_sync
 	$(INSTALL_DATA) ./files/macfilter_whitelist.config $(1)/etc/config/macfilter_whitelist
 	$(INSTALL_DATA) ./files/appfilter_whitelist.config $(1)/etc/config/appfilter_whitelist
 	$(INSTALL_DATA) ./files/fwx_record.config $(1)/etc/config/fwx_record

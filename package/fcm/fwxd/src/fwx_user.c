@@ -2141,12 +2141,26 @@ static int collect_wireless_ifnames(char ifnames[][MAX_WIRELESS_IFNAME_LEN], cha
 
         for (i = 0; i < json_object_array_length(interfaces_obj); i++) {
             struct json_object *iface_obj = json_object_array_get_idx(interfaces_obj, i);
+            struct json_object *iface_config_obj = NULL;
+            struct json_object *iface_mode_obj = NULL;
             struct json_object *ifname_obj = NULL;
             struct json_object *vlans_obj = NULL;
             int j;
 
             if (!iface_obj || json_object_get_type(iface_obj) != json_type_object) {
                 continue;
+            }
+
+            /* Only AP vifs carry terminals. Mesh/STA/adhoc vifs also answer
+             * iwinfo assoclist, but with backhaul peer MACs, which must not
+             * be recorded as client devices. */
+            if (json_object_object_get_ex(iface_obj, "config", &iface_config_obj) &&
+                iface_config_obj && json_object_get_type(iface_config_obj) == json_type_object &&
+                json_object_object_get_ex(iface_config_obj, "mode", &iface_mode_obj) && iface_mode_obj) {
+                const char *iface_mode = json_object_get_string(iface_mode_obj);
+                if (iface_mode && strcmp(iface_mode, "ap") != 0) {
+                    continue;
+                }
             }
 
             if (json_object_object_get_ex(iface_obj, "ifname", &ifname_obj) && ifname_obj) {
