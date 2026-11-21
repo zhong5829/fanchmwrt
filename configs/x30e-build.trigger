@@ -1,1 +1,1 @@
-﻿2026-11-21 build-5: mesh vif filter + cross-node terminal sync
+﻿2026-11-21 build-6: ucode ubus leak backport (issue #48)
