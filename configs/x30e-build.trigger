@@ -1,1 +1,1 @@
-﻿2026-11-21 build-6: ucode ubus leak backport (issue #48)
+﻿2026-11-21 build-7: bind + serving node + ui fixes
