@@ -16,6 +16,8 @@ ENABLE=$(uci -q get $CONF.sync.enable)
 DOCROOT="/tmp/fwx_sync"
 PEERDIR="/tmp/fwx_peer"
 PUBDIR="$DOCROOT/$TOKEN"
+BIND_FILE="/etc/fwx_ap_bind.json"
+BIND_ENFORCER="/usr/bin/fwx_ap_bind.lua"
 
 mkdir -p "$PUBDIR" "$PEERDIR"
 
@@ -45,10 +47,33 @@ fetch_peer() {
 	mv -f "$PEERDIR/$peer.json.tmp" "$PEERDIR/$peer.json"
 }
 
+write_bindings() {
+	[ -f "$BIND_FILE" ] || return 0
+	cp -f "$BIND_FILE" "$PUBDIR/bindings.json.tmp" 2>/dev/null || return 1
+	mv -f "$PUBDIR/bindings.json.tmp" "$PUBDIR/bindings.json"
+}
+
+fetch_peer_bindings() {
+	local peer="$1"
+	[ -n "$peer" ] || return 0
+	[ "$peer" = "$SELF_IP" ] && return 0
+	curl -fsS --max-time 3 "http://$peer:$PORT/$TOKEN/bindings.json" -o "$PEERDIR/$peer.bindings.json.tmp" 2>/dev/null || return 1
+	[ -s "$PEERDIR/$peer.bindings.json.tmp" ] || return 1
+	mv -f "$PEERDIR/$peer.bindings.json.tmp" "$PEERDIR/$peer.bindings.json"
+}
+
+enforce_bindings() {
+	[ -f "$BIND_ENFORCER" ] || return 0
+	lua "$BIND_ENFORCER" >/dev/null 2>&1
+}
+
 while true; do
 	write_snapshot
+	write_bindings
 	for peer in $(uci -q get $CONF.sync.peers); do
 		fetch_peer "$peer"
+		fetch_peer_bindings "$peer"
 	done
+	enforce_bindings
 	sleep "$INTERVAL"
 done

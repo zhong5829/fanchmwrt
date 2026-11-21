@@ -22,6 +22,7 @@
 		let user_session_enable = false;
 		let user_rssi_enable = false;
 		let view_mode = 'list';
+		let bind_nodes = [];
 
 		function load_view_mode() {
 			var mobileDefault = false;
@@ -215,6 +216,7 @@
 			new XHR().get("<%=url('admin/fwx/get_all_users')%>", {flag: 3, page: page, page_size: page_size},
 				function (x, data) {
 					user_list_data = data.data;
+					bind_nodes = (data.data && Array.isArray(data.data.bind_nodes)) ? data.data.bind_nodes : [];
 					total_num = data.data.total_num || 0;
 					total_page = data.data.total_page || 1;
 					cur_page = data.data.page || 1;
@@ -269,6 +271,75 @@
 		}
 
 		
+
+		function bind_band_text(band) {
+			if (band === '2g') return '2.4G';
+			if (band === '5g') return '5G';
+			return '<%:Auto%>';
+		}
+
+		function bind_node_label(ip) {
+			if (!ip) return '';
+			for (var i = 0; i < bind_nodes.length; i++) {
+				if (bind_nodes[i].ip === ip) return bind_nodes[i].label;
+			}
+			return ip;
+		}
+
+		function bind_summary(user) {
+			if (!user || !user.bind_node) return '';
+			return bind_node_label(user.bind_node) + ' / ' + bind_band_text(user.bind_band);
+		}
+
+		function open_bind_modal(mac, node, band) {
+			$('#bindMac').val(mac);
+			$('#bindMacDisplay').text(mac);
+			var $sel = $('#bindNodeSelect');
+			$sel.empty();
+			var options = bind_nodes.length ? bind_nodes : [
+				{ ip: '192.168.110.1', label: '主路由 (192.168.110.1)' },
+				{ ip: '192.168.110.2', label: 'Node2 (192.168.110.2)' },
+				{ ip: '192.168.110.3', label: 'Node3 (192.168.110.3)' }
+			];
+			for (var i = 0; i < options.length; i++) {
+				$sel.append($('<option>').val(options[i].ip).text(options[i].label));
+			}
+			if (node) $sel.val(node);
+			$('#bindBandSelect').val(band && band !== '' ? band : 'auto');
+			$('#bindModal').css('display', 'flex');
+		}
+
+		function submit_bind() {
+			var mac = $('#bindMac').val();
+			var node = $('#bindNodeSelect').val();
+			var band = $('#bindBandSelect').val();
+			if (!mac || !node) return;
+			new XHR().post("<%=url('admin/fwx/set_ap_bind')%>", { mac: mac, node: node, band: band }, function(x, data) {
+				if (data && data.code === 0) {
+					closeModal('bindModal');
+					getAllUsersData(cur_page);
+				} else {
+					alert('<%:Operation failed%>');
+				}
+			}, function() {
+				alert('<%:Operation failed%>');
+			});
+		}
+
+		function unbind_device() {
+			var mac = $('#bindMac').val();
+			if (!mac) return;
+			new XHR().post("<%=url('admin/fwx/del_ap_bind')%>", { mac: mac }, function(x, data) {
+				if (data && data.code === 0) {
+					closeModal('bindModal');
+					getAllUsersData(cur_page);
+				} else {
+					alert('<%:Operation failed%>');
+				}
+			}, function() {
+				alert('<%:Operation failed%>');
+			});
+		}
 
 		function generateMockData() {
 			return [
@@ -766,6 +837,7 @@
 					$tr.append(`
 						<td class="td">
 							<button type="button" class="cbi-button cbi-button-add" onclick="window.location.href='<%=url("admin/fwx_user/detail")%>?mac=' + encodeURIComponent('${user_list[i].mac}')" style="margin-right: 5px;"><%:Detail%></button>
+							<button type="button" class="cbi-button" style="margin-right: 5px;" title="${escapeHtml(bind_summary(user_list[i]))}" onclick="open_bind_modal('${user_list[i].mac}', '${user_list[i].bind_node || ''}', '${user_list[i].bind_band || 'auto'}')">${user_list[i].bind_node ? '<%:Bound%>' : '<%:Bind AP%>'}</button>
 							<button type="button" class="${blacklistClass}" onclick="toggleBlacklist('${user_list[i].mac}', ${inBlacklist ? 1 : 0})">${blacklistText}</button>
 						</td>
 					`);
@@ -815,6 +887,7 @@
 							</div>
 							<div class="user-card-actions">
 								<button type="button" class="cbi-button cbi-button-add" onclick="window.location.href='<%=url("admin/fwx_user/detail")%>?mac=' + encodeURIComponent('${user_list[i].mac}')"><%:Detail%></button>
+								<button type="button" class="cbi-button" title="${escapeHtml(bind_summary(user_list[i]))}" onclick="open_bind_modal('${user_list[i].mac}', '${user_list[i].bind_node || ''}', '${user_list[i].bind_band || 'auto'}')">${user_list[i].bind_node ? '<%:Bound%>' : '<%:Bind AP%>'}</button>
 								<button type="button" class="${blacklistClass}" onclick="toggleBlacklist('${user_list[i].mac}', ${inBlacklist ? 1 : 0})">${blacklistText}</button>
 							</div>
 						</div>
@@ -1339,6 +1412,30 @@
 		</div>
 
     </div>
+</div>
+
+<div id="bindModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 10000; justify-content: center; align-items: center;">
+	<div class="modal-content" style="background: var(--background-color-high, #ffffff); color: var(--text-color-high, #333); padding: 20px; border-radius: 5px; width: 430px; position: relative; border: 1px solid var(--border-color-low, #e5e7eb);">
+		<button type="button" onclick="closeModal('bindModal')" class="modal-close" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: var(--text-color-high, #333); font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px; line-height: 30px;">&times;</button>
+		<h4 style="margin: 0 0 16px 0; color: inherit;"><%:Bind AP%></h4>
+		<p style="margin-bottom: 10px;"><span class="field-label"><%:MAC Address%>:</span> <span id="bindMacDisplay">--</span></p>
+		<input type="hidden" id="bindMac" value="">
+		<p style="margin-bottom: 10px;"><span class="field-label"><%:Target Node%>:</span>
+			<select id="bindNodeSelect" style="padding: 5px; background: inherit; color: inherit; border: 1px solid var(--border-color-medium, #d1d5db); border-radius: 4px; min-width: 220px;"></select>
+		</p>
+		<p style="margin-bottom: 16px;"><span class="field-label"><%:Band%>:</span>
+			<select id="bindBandSelect" style="padding: 5px; background: inherit; color: inherit; border: 1px solid var(--border-color-medium, #d1d5db); border-radius: 4px; min-width: 120px;">
+				<option value="auto"><%:Auto%></option>
+				<option value="2g">2.4G</option>
+				<option value="5g">5G</option>
+			</select>
+		</p>
+		<div style="display: flex; justify-content: flex-end; gap: 8px;">
+			<button type="button" class="cbi-button" onclick="closeModal('bindModal')"><%:Cancel%></button>
+			<button type="button" class="cbi-button cbi-button-reset" onclick="unbind_device()"><%:Unbind%></button>
+			<button type="button" class="cbi-button cbi-button-add" onclick="submit_bind()"><%:Confirm%></button>
+		</div>
+	</div>
 </div>
 
 <div id="nicknameModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 10000; justify-content: center; align-items: center;">

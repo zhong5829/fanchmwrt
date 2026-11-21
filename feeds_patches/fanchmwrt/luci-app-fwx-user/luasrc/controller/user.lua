@@ -174,6 +174,181 @@ local function load_sync_peer_lists()
 	return lists
 end
 
+local AP_BIND_FILE = "/etc/fwx_ap_bind.json"
+
+local function read_json_file(path)
+	local fd = io.open(path, "r")
+	if not fd then
+		return nil
+	end
+	local raw = fd:read("*a")
+	fd:close()
+	local ok, parsed = pcall(require("luci.jsonc").parse, raw)
+	if ok then
+		return parsed
+	end
+	return nil
+end
+
+function load_effective_bindings()
+	local merged = {}
+	local sets = {}
+
+	local local_data = read_json_file(AP_BIND_FILE)
+	if local_data and type(local_data.bindings) == "table" then
+		sets[#sets + 1] = local_data.bindings
+	end
+
+	local dir = io.popen("ls -1 " .. SYNC_PEER_DIR .. "/*.bindings.json 2>/dev/null")
+	if dir then
+		for path in dir:lines() do
+			local data = read_json_file(path)
+			if data and type(data.bindings) == "table" then
+				sets[#sets + 1] = data.bindings
+			end
+		end
+		dir:close()
+	end
+
+	for _, set in ipairs(sets) do
+		for mac, item in pairs(set) do
+			if type(item) == "table" then
+				local key = string.upper(tostring(mac))
+				local ts = tonumber(item.ts) or 0
+				if not merged[key] or ts >= (tonumber(merged[key].ts) or 0) then
+					merged[key] = item
+				end
+			end
+		end
+	end
+	return merged
+end
+
+local function save_local_binding(mac, node, band, deleted)
+	local data = read_json_file(AP_BIND_FILE) or {}
+	if type(data.bindings) ~= "table" then
+		data.bindings = {}
+	end
+	data.bindings[string.upper(mac)] = {
+		node = node or "",
+		band = band or "auto",
+		ts = os.time(),
+		deleted = deleted and true or false
+	}
+	local tmp = AP_BIND_FILE .. ".tmp"
+	local fd = io.open(tmp, "w")
+	if not fd then
+		return false
+	end
+	fd:write(require("luci.jsonc").stringify(data))
+	fd:close()
+	os.rename(tmp, AP_BIND_FILE)
+	return true
+end
+
+local function own_lan_ip()
+	local fd = io.popen("uci -q get network.lan.ipaddr 2>/dev/null")
+	if not fd then
+		return nil
+	end
+	local ip = fd:read("*l")
+	fd:close()
+	return ip and ip:match("^(%d+%.%d+%.%d+%.%d+)")
+end
+
+local function build_bind_nodes()
+	local nodes = {}
+	local self_ip = own_lan_ip()
+	local seen = {}
+	local peers = {}
+	local fd = io.popen("uci -q get fwx_sync.sync.peers 2>/dev/null")
+	if fd then
+		local line = fd:read("*l")
+		fd:close()
+		for ip in (line or ""):gmatch("%S+") do
+			peers[#peers + 1] = ip
+		end
+	end
+	if #peers == 0 then
+		peers = { "192.168.110.1", "192.168.110.2", "192.168.110.3" }
+	end
+	for _, ip in ipairs(peers) do
+		if not seen[ip] then
+			seen[ip] = true
+			local last = ip:match("%.(%d+)$")
+			local label
+			if last == "1" then
+				label = "主路由 (" .. ip .. ")"
+			else
+				label = "Node" .. (last or ip) .. " (" .. ip .. ")"
+			end
+			if ip == self_ip then
+				label = label .. " 本机"
+			end
+			nodes[#nodes + 1] = { ip = ip, label = label }
+		end
+	end
+	return nodes
+end
+
+function annotate_ap_bindings(list)
+	local bindings = load_effective_bindings()
+	for _, user in ipairs(list or {}) do
+		local b = bindings[string.upper(tostring(user.mac or ""))]
+		if b and not b.deleted and b.node and b.node ~= "" then
+			user.bind_node = b.node
+			user.bind_band = b.band or "auto"
+		else
+			user.bind_node = ""
+			user.bind_band = ""
+		end
+	end
+end
+
+function set_ap_bind()
+	luci.http.prepare_content("application/json")
+	local mac = normalize_mac(luci.http.formvalue("mac"))
+	local node = luci.http.formvalue("node") or ""
+	local band = luci.http.formvalue("band") or "auto"
+	if not mac:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then
+		luci.http.write_json({ code = 1, message = "invalid mac" })
+		return
+	end
+	if band ~= "auto" and band ~= "2g" and band ~= "5g" then
+		band = "auto"
+	end
+	local valid_node = false
+	for _, item in ipairs(build_bind_nodes()) do
+		if item.ip == node then
+			valid_node = true
+			break
+		end
+	end
+	if not valid_node then
+		luci.http.write_json({ code = 1, message = "invalid node" })
+		return
+	end
+	if save_local_binding(mac, node, band, false) then
+		luci.http.write_json({ code = 0, message = "success" })
+	else
+		luci.http.write_json({ code = 1, message = "save failed" })
+	end
+end
+
+function del_ap_bind()
+	luci.http.prepare_content("application/json")
+	local mac = normalize_mac(luci.http.formvalue("mac"))
+	if not mac:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then
+		luci.http.write_json({ code = 1, message = "invalid mac" })
+		return
+	end
+	if save_local_binding(mac, "", "auto", true) then
+		luci.http.write_json({ code = 0, message = "success" })
+	else
+		luci.http.write_json({ code = 1, message = "save failed" })
+	end
+end
+
 function index()
 	local page
 	entry({"admin", "fwx_user"}, alias("admin", "fwx_user", "list"), _("User List"), 13).dependent = true
@@ -187,6 +362,8 @@ function index()
 	entry({"admin", "fwx", "app_class_visit_time"}, call("get_app_class_visit_time"), nil).leaf = true
 	entry({"admin", "fwx", "get_class_list"}, call("get_class_list"), nil).leaf = true
 	entry({"admin", "fwx", "get_all_users"}, call("get_all_users"), nil).leaf = true
+	entry({"admin", "fwx", "set_ap_bind"}, call("set_ap_bind"), nil).leaf = true
+	entry({"admin", "fwx", "del_ap_bind"}, call("del_ap_bind"), nil).leaf = true
 	entry({"admin", "fwx", "get_system_base_info"}, call("get_system_base_info"), nil).leaf = true
 	entry({"admin", "fwx", "get_mac_blacklist"}, call("get_mac_blacklist"), nil).leaf = true
 	entry({"admin", "fwx", "add_mac_blacklist"}, call("add_mac_blacklist"), nil).leaf = true
@@ -341,6 +518,7 @@ function get_all_users()
 		merged = local_list
 	end
 	pcall(sort_sync_users, merged)
+	pcall(annotate_ap_bindings, merged)
 
 	local total_num = #merged
 	local total_page = 1
@@ -371,7 +549,8 @@ function get_all_users()
 		total_num = total_num,
 		total_page = total_page,
 		page = resp_page,
-		page_size = resp_page_size
+		page_size = resp_page_size,
+		bind_nodes = build_bind_nodes()
 	}})
 end
 

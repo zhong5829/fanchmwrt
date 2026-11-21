@@ -59,6 +59,7 @@ define Package/fwxd/install
 	$(INSTALL_BIN) ./files/fwx.init $(1)/etc/init.d/fwx
 	$(INSTALL_BIN) ./files/fwx_sync.init $(1)/etc/init.d/fwx_sync
 	$(INSTALL_BIN) ./files/fwx_sync.sh $(1)/usr/bin
+	$(INSTALL_DATA) ./files/fwx_ap_bind.lua $(1)/usr/bin/fwx_ap_bind.lua
 	$(INSTALL_BIN) ./files/fwx_cli.sh $(1)/usr/bin
 	$(INSTALL_BIN) ./files/fwx_app_init.sh $(1)/usr/bin/fwx_app_init
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/fwxd $(1)/usr/bin
